@@ -70,39 +70,25 @@ void setTone(uint32_t frequency) {
      - Segments 1 & 2: A repeating pattern with E5
      - Segment 3: A rising pattern ending on a double-long E5
      - Segments 4-7: A mix of F5, E5, G5, D5, and a final C5
-*/
+    */
 void playTune(void) {
     uint32_t runMelody[] = {
-        // Segment 1
         E5, E5, E5,
-        // Segment 2
         E5, E5, E5,
-        // Segment 3
         E5, G5, C5, D5, E5,
-        // Segment 4
         F5, F5, F5, F5,
-        // Segment 5
         F5, E5, E5, E5, E5,
-        // Segment 6
         G5, G5, F5, D5,
-        // Segment 7
         C5
     };
     
     uint32_t runDuration[] = {
-        // Segment 1 durations
         one_note, one_note, two_note,
-        // Segment 2 durations
         one_note, one_note, two_note,
-        // Segment 3 durations
         one_note, one_note, one_note, one_note, (two_note * 2),
-        // Segment 4 durations
         one_note, one_note, one_note, one_note,
-        // Segment 5 durations
         one_note, one_note, one_note, semi_note, semi_note,
-        // Segment 6 durations
         one_note, one_note, one_note, one_note,
-        // Segment 7 duration
         (two_note * 2)
     };
     
@@ -117,24 +103,16 @@ void playTune(void) {
 
 void playCelebratoryTune(void) {
     uint32_t celebratoryMelody[] = {
-        // Segment 1
         E5, B5, A5, B5, C6, C6, B5, G5, G5,
-        // Segment 2
         A5, A5, A5, G5, E5, E5, E5, E5, D5,
-        // Segment 3
         E5, B5, A5, B5, C6, C6, B5, G5, G5,
-        // Segment 4
         A5, A5, A5, G5, E5, E5
     };
     
     uint32_t celebratoryDuration[] = {
-        // Segment 1 durations
         one_note, one_note, semi_note, semi_note, one_note, semi_note, one_note, semi_note, one_note,
-        // Segment 2 durations
         one_note, one_note, semi_note, (semi_note * 3), one_note, semi_note, semi_note, semi_note, (semi_note * 3),
-        // Segment 3 durations
         one_note, one_note, semi_note, semi_note, one_note, semi_note, one_note, semi_note, one_note,
-        // Segment 4 durations
         one_note, one_note, semi_note, (semi_note * 3), (one_note * 2), (one_note * 2)
     };
     
@@ -150,15 +128,24 @@ void playCelebratoryTune(void) {
 
 
 void audio_thread(void *argument) {
-    // Continuously play the run song until the challenge is complete.
-    while (!runComplete) {
-         playTune();
+    for (;;) {
+        // Check if the challenge is complete
+        osMutexAcquire(robot_state_mutex, osWaitForever);
+        bool complete = runComplete;
+        osMutexRelease(robot_state_mutex);
+        
+        if (complete) {
+            break;
+        }
+        
+        // Play the normal tune continuously.
+        playTune();
     }
-    // When the challenge run is complete, play the unique end tone.
-    playCelebratoryTune();
-
     
-    // Optionally, suspend the thread after finishing.
+    // When challenge is complete, play the unique end tone.
+    playCelebratoryTune();
+    
+    // Can suspend audio thread here if needed.
     for (;;) {
         osDelay(1000);
     }

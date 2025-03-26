@@ -4,6 +4,9 @@
 #include "cmsis_os2.h"
 #include <stdbool.h>
 #include "led.h"
+#include "audio.h"
+#include "variables.h"
+
 
 // --- Mutex Definition and Initialization (Moved to main.c) ---
 osMutexId_t robot_state_mutex;
@@ -35,6 +38,7 @@ int main (void) {
     // System Initialization
     SystemCoreClockUpdate();
     init_leds(); // Initialize LEDs
+    // initAudio(); // Initialize audio
 
     osKernelInitialize();
 
@@ -46,6 +50,7 @@ int main (void) {
 
     osThreadNew(led_control_thread, NULL, NULL);
     osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (now defined in main.c)
+    // osThreadNew(audio_thread, NULL, NULL); // Create audio thread
 
     osKernelStart();
     for (;;) {}
