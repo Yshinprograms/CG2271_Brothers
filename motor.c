@@ -1,155 +1,116 @@
-// led.c
+// motor.c
 #include "motor.h" // Include the header file
 #include "RTE_Components.h" // Still needed for some definitions potentially
 #include "MKL25Z4.h" //Devide header file
 #include "cmsis_os2.h"
 #include <stdbool.h>
 
-#define LEFTENGINE_in 12 //input for four engines
-#define RIGHTENGINE_in 16
-
-#define LEFTENGINE__out 13 //output for four engines
-#define RIGHTENGINE__out 17
-
 #define MASK(x) (1 << (x))
 
-void initMotor() {
+// Renamed to match declaration in motor.h
+void init_Motor() {
 	//if the speed is too much we probably can use a timer(PWM) to vary duty cycledx
 	SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK;
 
-	PORTC->PCR[LEFTENGINE_in] &= ~PORT_PCR_MUX_MASK;
-  PORTC->PCR[LEFTENGINE_in] |= PORT_PCR_MUX(1);
-  PORTC->PCR[LEFTENGINE__out] &= ~PORT_PCR_MUX_MASK;
-  PORTC->PCR[LEFTENGINE__out] |= PORT_PCR_MUX(1);
+	MOTOR_PORT->PCR[LEFTENGINE_in] &= ~PORT_PCR_MUX_MASK;
+  MOTOR_PORT->PCR[LEFTENGINE_in] |= PORT_PCR_MUX(1);
+  MOTOR_PORT->PCR[LEFTENGINE__out] &= ~PORT_PCR_MUX_MASK;
+  MOTOR_PORT->PCR[LEFTENGINE__out] |= PORT_PCR_MUX(1);
 	
-	PORTC->PCR[RIGHTENGINE_in] &= ~PORT_PCR_MUX_MASK;
-  PORTC->PCR[RIGHTENGINE_in] |= PORT_PCR_MUX(1);
-  PORTC->PCR[RIGHTENGINE__out] &= ~PORT_PCR_MUX_MASK;
-  PORTC->PCR[RIGHTENGINE__out] |= PORT_PCR_MUX(1);
+	MOTOR_PORT->PCR[RIGHTENGINE_in] &= ~PORT_PCR_MUX_MASK;
+  MOTOR_PORT->PCR[RIGHTENGINE_in] |= PORT_PCR_MUX(1);
+  MOTOR_PORT->PCR[RIGHTENGINE__out] &= ~PORT_PCR_MUX_MASK;
+  MOTOR_PORT->PCR[RIGHTENGINE__out] |= PORT_PCR_MUX(1);
   
-	PTC->PDDR |= MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	PTC->PDDR |= MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	MOTOR_PORT->PDDR |= MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PDDR |= MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 	
-	//turn off motors 
+	//turn off motors initially
+	moveStop();
 }
 
 
+// Removed osDelay from individual move functions
 void moveUp() { 
 	//both sides move forward
-	PTC->PSOR = MASK(LEFTENGINE_in)| MASK(RIGHTENGINE_in);
-	PTC->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
-	osDelay(500); //move for half a second
+	MOTOR_PORT->PSOR = MASK(LEFTENGINE_in)| MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
 }
 
 void moveLeft() {
-	//left side move backward  
-	PTC->PSOR = MASK(LEFTENGINE__out);
-	PTC->PCOR = MASK(LEFTENGINE_in);
 	//right side move forward
-	PTC->PSOR = MASK(RIGHTENGINE_in);
-	PTC->PCOR = MASK(RIGHTENGINE__out);
-	osDelay(500); //move for half a second
+	MOTOR_PORT->PSOR = MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PCOR = MASK(RIGHTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
+	
+	//left side move back
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in);
+	MOTOR_PORT->PSOR = MASK(LEFTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
 }
 
 void moveRight() {
-	//right side move backward  
-	PTC->PSOR = MASK(RIGHTENGINE__out);
-	PTC->PCOR = MASK(RIGHTENGINE_in);
+	//right side move back
+	MOTOR_PORT->PCOR = MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PSOR = MASK(RIGHTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
+	
 	//left side move forward
-	PTC->PSOR = MASK(LEFTENGINE_in);
-	PTC->PCOR = MASK(LEFTENGINE__out);
-	osDelay(500); //move for half a second
+	MOTOR_PORT->PSOR = MASK(LEFTENGINE_in);
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
 }
 
 void moveBack() {
 	//both sides move back
-	PTC->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	PTC->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
-	osDelay(500); //move for half a second
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	osDelay(500); // Move for 0.5s interval
 }
 
 void moveStop() {
-	//set both sides
-	PTC->PSOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	PTC->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	//set both sides to stop (both inputs low or both high, depends on driver)
+	// Assuming setting both LOW stops the motor
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	// Alternatively, if setting both HIGH stops:
+	// MOTOR_PORT->PSOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	// MOTOR_PORT->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 }
 
 // --- Motor Control Thread ---
-// to test out the motor functions
-void motor_control__test_thread (void *argument) {
-// Simulate robot movement for testing
-	RobotState robot_state;
-    for (;;) {
-        // Move forward for 5 seconds
-			  robot_state = ROBOT_MOVING_FORWARD;
-				motor_control_thread(NULL);
-        //osDelay(5000); // Simulate moving for 5 seconds
-			
-        // Stop for 5 seconds
-        robot_state = ROBOT_STATIONARY;
-				motor_control_thread(NULL);
-        osDelay(5000); 
-
-				// Move left for 5 seconds
-				robot_state = ROBOT_MOVING_LEFT;
-				motor_control_thread(NULL);
-        //osDelay(5000); // Simulate moving for 5 seconds
-			
-			  // Stop for 5 seconds
-        robot_state = ROBOT_STATIONARY;
-				motor_control_thread(NULL);
-        osDelay(5000); 
-
-				// Move right for 5 seconds
-				robot_state = ROBOT_MOVING_RIGHT;
-				motor_control_thread(NULL);
-        //osDelay(5000); // Simulate moving for 5 seconds
-			
-			  // Stop for 5 seconds
-        robot_state = ROBOT_STATIONARY;
-				motor_control_thread(NULL);
-        osDelay(5000); 
-				
-				// Move back for 5 seconds
-				robot_state = ROBOT_MOVING_BACK;
-				motor_control_thread(NULL);
-        //osDelay(5000); // Simulate moving for 5 seconds
-			
-			  // Stop for 5 seconds
-        robot_state = ROBOT_STATIONARY;
-				motor_control_thread(NULL);
-        osDelay(5000); 
-    }
-}
-
-// --- Motor Control Thread ---
-
+// Controls movement based on the shared robot_state
 void motor_control_thread (void *argument) {
 	//actually control the movement
+	RobotState current_state; 
 	for (;;) {
         osMutexAcquire(robot_state_mutex, osWaitForever);
-        RobotState current_state = robot_state;
+        current_state = robot_state; // Read shared state safely
+        osMutexRelease(robot_state_mutex);
+		    
 		    switch (current_state) {
-					case (ROBOT_MOVING_FORWARD | ROBOT_MOVING) :
+					// Corrected case statements (no bitwise OR)
+					case ROBOT_MOVING_FORWARD:
+					case ROBOT_MOVING: // Treat generic MOVING as FORWARD for now
 						moveUp();
-						moveStop();
 					break;
-					case (ROBOT_MOVING_LEFT):
+					case ROBOT_MOVING_LEFT:
 						moveLeft();
-						moveStop();
 					break;
-					case (ROBOT_MOVING_RIGHT):
+					case ROBOT_MOVING_RIGHT:
 						moveRight();
-						moveStop();
 					break;
-					case (ROBOT_MOVING_BACK) :
+					case ROBOT_MOVING_BACK:
 						moveBack();
-						moveStop();
 					break;
-					default: 
+					case ROBOT_STATIONARY:
+					default: // Stop for STATIONARY or any unknown state
 						moveStop();
 					break;
 				}
-        osMutexRelease(robot_state_mutex);
+				
+				// Add a small delay to yield CPU time
+				osDelay(20); 
     }
 }

@@ -2,7 +2,8 @@
 #ifndef LED_H
 #define LED_H
 
-#include "cmsis_os2.h" // Include for osMutexId_t and RobotState enum
+#include "cmsis_os2.h" // Include for osMutexId_t
+#include "motor.h"     // Include for RobotState enum
 
 // --- LED Pin Definitions (Keep in header for easy access) ---
 #define GREEN_LED_0  7  // PTC7
@@ -35,12 +36,6 @@
 #define NUM_RED_LEDS 8
 #define led_on    1
 #define led_off   0
-
-// --- Robot State --- (Keep Enum Definition in led.h - Conceptual Link to LEDs)
-typedef enum {
-    ROBOT_STATIONARY,
-    ROBOT_MOVING
-} RobotState;
 
 // --- Mutex Declaration (Declare as extern - defined in main.c) ---
 extern osMutexId_t robot_state_mutex;

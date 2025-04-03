@@ -5,8 +5,7 @@
 #include <stdbool.h>
 #include "led.h"
 #include "audio.h" // Include the audio header
-
-
+#include "motor.h" // Include the motor header
 
 // --- Mutex Definition and Initialization (Moved to main.c) ---
 osMutexId_t robot_state_mutex;
@@ -15,25 +14,52 @@ osMutexId_t robot_state_mutex;
 volatile RobotState robot_state = ROBOT_STATIONARY; // Initial state
 volatile bool runComplete = false;
 
-// --- Motor Control Thread (Moved to main.c) ---
-void motor_control_thread(void *argument) {
-    // Simulate robot movement for testing
-    for (;;) {
-        // Move for 5 seconds
-        osMutexAcquire(robot_state_mutex, osWaitForever);
-        robot_state = ROBOT_MOVING;
-        osMutexRelease(robot_state_mutex);
-        osDelay(5000); // Simulate moving for 5 seconds
+// --- Test Sequence Thread (Optional - can replace the simple motor logic above) ---
+// This thread now sets the state for the motor_control_thread in motor.c to act upon.
+void test_sequence_thread(void *argument) {
+	for(;;) {
+		// Move Forward
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_MOVING_FORWARD;
+		runComplete = false; // Example: Play melody 1 when moving
+		osMutexRelease(robot_state_mutex);
+		osDelay(3000); // Move forward for 3 seconds
 
-        // Stop for 5 seconds
-        osMutexAcquire(robot_state_mutex, osWaitForever);
-        robot_state = ROBOT_STATIONARY;
-        osMutexRelease(robot_state_mutex);
-        osDelay(5000); // Simulate stationary for 5 seconds
+		// Stationary
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_STATIONARY;
+		runComplete = true; // Example: Play melody 2 when stopped
+		osMutexRelease(robot_state_mutex);
+		osDelay(3000); // Stay stationary for 3 seconds
 			
-			  // For testing: Toggle runComplete flag to switch melodies.
-        runComplete = !runComplete;
-    }
+		// Move Left
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_MOVING_LEFT;
+		runComplete = false;
+		osMutexRelease(robot_state_mutex);
+		osDelay(1000); // Turn left for 1 second
+			
+		// Move Right
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_MOVING_RIGHT;
+		runComplete = false;
+		osMutexRelease(robot_state_mutex);
+		osDelay(1000); // Turn right for 1 second
+			
+		// Move Back
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_MOVING_BACK;
+		runComplete = false;
+		osMutexRelease(robot_state_mutex);
+		osDelay(2000); // Move back for 2 seconds
+			
+		// Stationary again
+		osMutexAcquire(robot_state_mutex, osWaitForever);
+		robot_state = ROBOT_STATIONARY;
+		runComplete = true;
+		osMutexRelease(robot_state_mutex);
+		osDelay(3000); 
+	}
 }
 
 
@@ -42,6 +68,7 @@ int main (void) {
     // System Initialization
     SystemCoreClockUpdate();
     init_leds(); // Initialize LEDs
+	init_Motor(); // Initialize Motors (Corrected name)
 
     osKernelInitialize();
 
@@ -52,9 +79,9 @@ int main (void) {
     }
 
     osThreadNew(led_control_thread, NULL, NULL);
-    osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (now defined in main.c)
-    
-		osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
+    osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (uses definition from motor.c)
+	osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
+	osThreadNew(test_sequence_thread, NULL, NULL); // Create the test sequence thread
 
     osKernelStart();
     for (;;) {}

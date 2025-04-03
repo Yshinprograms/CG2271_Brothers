@@ -4,16 +4,14 @@
 
 #include "cmsis_os2.h" // Include for osMutexId_t and RobotState enum
 
-// RED LEDs are split across two ports. Create separate port macros.
-#define RED_LED_PORT_A PTA
-#define RED_LED_PORT_C PTC
-#define RED_LED_PORT_D PTD
+// --- Motor Pin Definitions ---
+#define LEFTENGINE_in 12 // PTC12
+#define RIGHTENGINE_in 16 // PTC16
+#define LEFTENGINE__out 13 // PTC13
+#define RIGHTENGINE__out 17 // PTC17
+#define MOTOR_PORT PTC
 
-// --- Other Definitions ---
-#define NUM_GREEN_LEDS 8
-#define NUM_RED_LEDS 8
-
-// --- Robot State --- (Keep Enum Definition in led.h - Conceptual Link to LEDs)
+// --- Robot State --- (Unified Definition)
 typedef enum {
     ROBOT_STATIONARY,
 		ROBOT_MOVING,
@@ -38,8 +36,7 @@ void moveLeft(void);
 void moveBack(void);
 void moveRight(void);
 void moveStop(void);
-void motor_control_test_thread(void *argument);
 void motor_control_thread(void *argument);
 
 
-#endif // LED_H
+#endif // MOTOR_H

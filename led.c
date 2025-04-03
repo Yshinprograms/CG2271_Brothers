@@ -1,5 +1,6 @@
 // led.c
 #include "led.h" // Include the header file
+#include "motor.h" // Include motor.h for RobotState (needed by led.h)
 #include "RTE_Components.h" // Still needed for some definitions potentially
 #include "MKL25Z4.h"
 #include "cmsis_os2.h"
@@ -87,20 +88,22 @@ void set_red_led(int index, int state) {
   }
 }
 
+// --- Helper function to set ALL red LEDs to a specific state ---
+void set_all_red_leds(int state) {
+	for (int i = 0; i < NUM_RED_LEDS; i++) {
+		set_red_led(i, state);
+	}
+}
 
+// --- LED Control Functions (Modified: No internal delays) ---
 
-// --- LED Control Functions ---
-
-void running_green_leds(void) {
-    static int current_led = 0; // Keep track of the currently lit LED
-
+// Sets the green LEDs to the running state (one on, others off)
+void running_green_leds(int current_led_index) {
     // Turn off all LEDs except the current one
     for (int i = 0; i < NUM_GREEN_LEDS; i++) {
-        set_green_led(i, (i == current_led) ? led_on : led_off);
+        set_green_led(i, (i == current_led_index) ? led_on : led_off);
     }
-
-    current_led = (current_led + 1) % NUM_GREEN_LEDS; // Move to the next LED (circular)
-    osDelay(100); // Adjust delay for the running speed (e.g., 100ms)
+		// Delay removed - Timing is handled by the calling thread
 }
 
 void all_green_leds_on(void) {
@@ -115,40 +118,84 @@ void all_green_leds_off(void) {
     }
 }
 
-void red_leds_moving_flash(void) {
-    static bool leds_state = false;
-    for (int i = 0; i < NUM_RED_LEDS; i++) {
-        set_red_led(i, leds_state ? led_off : led_on);
-    }
-    leds_state = !leds_state;
-    osDelay(500);
-}
-
-void red_leds_stationary_flash(void) {
-    static bool leds_state = false;
-    for (int i = 0; i < NUM_RED_LEDS; i++) {
-        set_red_led(i, leds_state ? led_off : led_on);
-    }
-    leds_state = !leds_state;
-    osDelay(250);
-}
-
-// --- LED Control Thread ---
+// --- LED Control Thread (Refactored for correct timing) ---
 
 void led_control_thread(void *argument) {
+	RobotState current_state = ROBOT_STATIONARY; // Local variable to hold state
+	RobotState previous_state = ROBOT_STATIONARY;
+	int green_led_index = 0;
+	bool red_led_state = false; // false = off, true = on
+	uint32_t last_green_change_tick = 0;
+	uint32_t last_red_toggle_tick = 0;
+	uint32_t green_running_interval = 100; // ms between green LED changes
+	uint32_t red_moving_interval = 500;    // ms ON / ms OFF for moving red LEDs
+	uint32_t red_stationary_interval = 250;// ms ON / ms OFF for stationary red LEDs
+	uint32_t tick_freq = osKernelGetTickFreq(); // Ticks per second
+
+	// Convert ms intervals to ticks
+	uint32_t green_running_ticks = (green_running_interval * tick_freq) / 1000;
+	uint32_t red_moving_ticks = (red_moving_interval * tick_freq) / 1000;
+	uint32_t red_stationary_ticks = (red_stationary_interval * tick_freq) / 1000;
+
+  // Initial LED state
+	all_green_leds_on();
+	set_all_red_leds(led_off); // Start with red LEDs off
+	last_red_toggle_tick = osKernelGetTickCount();
+	last_green_change_tick = osKernelGetTickCount();
+
   for (;;) {
+    uint32_t now = osKernelGetTickCount();
+
     // Acquire mutex to protect access to robot_state
     osMutexAcquire(robot_state_mutex, osWaitForever); // Access mutex declared in main.c via led.h
-    RobotState current_state = robot_state; // Make a local copy
+    current_state = robot_state; // Make a local copy
     osMutexRelease(robot_state_mutex);
 
-        if (current_state == ROBOT_MOVING) {
-            running_green_leds();
-            red_leds_moving_flash();
-        } else { // ROBOT_STATIONARY
-            all_green_leds_on();
-            red_leds_stationary_flash();
-        }
-    osDelay(10); // Add a small delay (e.g., 10ms) to prevent busy-waiting
+		// --- Handle State Transitions ---
+		if (current_state != previous_state) {
+			last_red_toggle_tick = now; // Reset timers on state change
+			last_green_change_tick = now;
+			green_led_index = 0; // Reset green index
+			if (current_state == ROBOT_STATIONARY) {
+				all_green_leds_on();
+				red_led_state = false; // Ensure red starts OFF for stationary
+				set_all_red_leds(led_off);
+			} else { // Moving state
+				running_green_leds(green_led_index); // Set initial running green LED
+				red_led_state = true; // Ensure red starts ON for moving
+				set_all_red_leds(led_on);
+			}
+			previous_state = current_state;
+		}
+
+		// --- Update LEDs based on current state and timing ---
+    if (current_state == ROBOT_MOVING || 
+				current_state == ROBOT_MOVING_FORWARD ||
+				current_state == ROBOT_MOVING_LEFT ||
+				current_state == ROBOT_MOVING_RIGHT ||
+				current_state == ROBOT_MOVING_BACK) 
+		{ // --- Moving State --- 
+			// Green Running LEDs (Update every green_running_interval ms)
+			if (now - last_green_change_tick >= green_running_ticks) {
+				green_led_index = (green_led_index + 1) % NUM_GREEN_LEDS;
+				running_green_leds(green_led_index);
+				last_green_change_tick = now;
+			}
+			// Red Flashing LEDs (Toggle every red_moving_interval ms)
+			if (now - last_red_toggle_tick >= red_moving_ticks) {
+				red_led_state = !red_led_state;
+				set_all_red_leds(red_led_state ? led_on : led_off);
+				last_red_toggle_tick = now;
+			}
+    } else { // --- Stationary State --- 
+			// Green LEDs: Ensure they stay ON (handled by state transition)
+			// Red Flashing LEDs (Toggle every red_stationary_interval ms)
+			if (now - last_red_toggle_tick >= red_stationary_ticks) {
+				red_led_state = !red_led_state;
+				set_all_red_leds(red_led_state ? led_on : led_off);
+				last_red_toggle_tick = now;
+			}
+    }
+    osDelay(10); // Loop delay for responsiveness (adjust if needed)
   }
 }
