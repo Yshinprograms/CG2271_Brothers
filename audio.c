@@ -1,219 +1,152 @@
-#include "MKL25Z4.h"  // Device header
 #include "audio.h"
+#include "variables.c"
+#include "MKL25Z4.h"
+#include "cmsis_os2.h"
+#include <stdbool.h>
 
-#define PTB0_Pin 0
-#define PTB1_Pin 1
+// Frequencies for musical notes
+#define A4 440
+#define Bflat4 466
+#define B4 494
+#define C5 523
+#define Csharp5 554
+#define D5 587
+#define Dsharp5 622
+#define E5 659
+#define F5 698
+#define Fsharp5 740
+#define G5 784
+#define Aflat5 831
+#define A5 880
+#define Bflat5 932
+#define B5 988
+#define C6 1047
 
-void initPWM(int frequency) 
-{
-  // Enable clock gating for PORTB.
-  SIM_SCGC5 |= SIM_SCGC5_PORTB_MASK;
-  
-  // Configure Mode 3 for PWM pin configuration.
-  PORTB->PCR[PTB0_Pin] &= ~PORT_PCR_MUX_MASK;
-  PORTB->PCR[PTB0_Pin] |= PORT_PCR_MUX(3);
-  
-  PORTB->PCR[PTB1_Pin] &= ~PORT_PCR_MUX_MASK;
-  PORTB->PCR[PTB1_Pin] |= PORT_PCR_MUX(3);
-  
-  // Enable clock gating for Timer 1.
-  SIM->SCGC6 |= SIM_SCGC6_TPM1_MASK;
-  
-  // Select clock source.
-  SIM->SOPT2 &= ~SIM_SOPT2_TPMSRC_MASK;
-  SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1);
-  
-  // Set MOD register for PWM frequency calculation (integer ceiling).
-  TPM1->MOD = (48000000 / 128 + frequency - 1) / frequency;
-  TPM1_C0V = (TPM1->MOD + 1) / 2; // 50% duty cycle
-  
-  // Set edge-aligned PWM mode.
-  TPM1->SC &= ~((TPM_SC_CMOD_MASK) | (TPM_SC_PS_MASK));
-  TPM1->SC |= (TPM_SC_CMOD(1) | TPM_SC_PS(7));
-  TPM1->SC &= ~(TPM_SC_CPWMS_MASK);
-  
-   TPM1_C0SC &= ~((TPM_CnSC_ELSB_MASK) | (TPM_CnSC_ELSA_MASK) |
-                  (TPM_CnSC_MSB_MASK) | (TPM_CnSC_MSA_MASK));
-   // Set Mode to Edge-aligned PWM, High-true pulses (clear output on match, set on reload)
-   TPM1_C0SC |= (TPM_CnSC_MSB(1) | TPM_CnSC_ELSB(1)); 
- }
+// Note durations in milliseconds
+#define semi_note 250
+#define one_note 500
+#define two_note 1000
 
-void delay_ms(uint32_t ms) {
-    // Simple blocking delay loop (not power efficient).
-    for (volatile uint32_t i = 0; i < (ms * 4000); i++);
+// External flag to allow early exit from playing a song
+extern volatile bool runComplete;
+
+/* Initialize PWM for audio output */
+void initAudio(void) {
+    // Enable Clock to PortA
+    SIM_SCGC5 |= SIM_SCGC5_PORTA_MASK;
+    
+    // Configure MUX to enable PWM for PortA
+    PORTA->PCR[BUZZER] &= ~PORT_PCR_MUX_MASK;  //which is 
+    PORTA->PCR[BUZZER] |= PORT_PCR_MUX(3);
+    
+    SIM_SCGC6 |= SIM_SCGC6_TPM1_MASK;
+    
+    SIM->SOPT2 &= ~SIM_SOPT2_TPMSRC_MASK;
+    SIM->SOPT2 |= SIM_SOPT2_TPMSRC(1);
+    TPM1->MOD = 7499; // 50Hz
+    
+    TPM1->SC &= ~(TPM_SC_CMOD_MASK | TPM_SC_PS_MASK);
+    TPM1->SC |= TPM_SC_CMOD(1) | TPM_SC_PS(7);
+    TPM1->SC &= ~(TPM_SC_CPWMS_MASK);
+    
+    TPM1_C0SC &= ~(TPM_CnSC_ELSB_MASK | TPM_CnSC_ELSA_MASK |
+                   TPM_CnSC_MSB_MASK | TPM_CnSC_MSA_MASK);
+    TPM1_C0SC |= TPM_CnSC_ELSB(1) | TPM_CnSC_MSB(1);
+    
+    TPM1_C0V = 3750; // 50% duty cycle
 }
 
-// Melody 1: Mary Had a Little Lamb
-// Note frequencies (Hz): C=262, D=294, E=330, G=392
-void playtune_melody1(void) {
-    int melody[] = {
-        330, 294, 262, 294, 330, 330, 330,
-        294, 294, 294,
-        330, 392, 392,
-        330, 294, 262, 294, 330, 330, 330
+/* Set the tone frequency for PWM sound output */
+void setTone(uint32_t frequency) {
+    uint32_t mod = (48000000 / (frequency * 128)) - 1;
+    TPM1->MOD = mod;
+    TPM1_C0V = mod / 2;
+    TPM1->SC |= TPM_SC_CMOD(1); // Update the counter
+}
+
+/* 
+   Normal Run Song
+   This song is divided into several segments:
+     - Segments 1 & 2: A repeating pattern with E5
+     - Segment 3: A rising pattern ending on a double-long E5
+     - Segments 4-7: A mix of F5, E5, G5, D5, and a final C5
+    */
+void playTune(void) {
+    uint32_t runMelody[] = {
+        E5, E5, E5,
+        E5, E5, E5,
+        E5, G5, C5, D5, E5,
+        F5, F5, F5, F5,
+        F5, E5, E5, E5, E5,
+        G5, G5, F5, D5,
+        C5
     };
-    int numNotes = sizeof(melody) / sizeof(melody[0]);
-    int noteDuration = 500; // 500ms per note
+    
+    uint32_t runDuration[] = {
+        one_note, one_note, two_note,
+        one_note, one_note, two_note,
+        one_note, one_note, one_note, one_note, (two_note * 2),
+        one_note, one_note, one_note, one_note,
+        one_note, one_note, one_note, semi_note, semi_note,
+        one_note, one_note, one_note, one_note,
+        (two_note * 2)
+    };
+    
+    int numNotes = sizeof(runMelody) / sizeof(runMelody[0]);
     
     for (int i = 0; i < numNotes; i++) {
-        initPWM(melody[i]);
-        delay_ms(noteDuration);
+        // if (runComplete) return;
+        setTone(runMelody[i]);
+        osDelay(runDuration[i]);
     }
-    // Stop PWM after the melody finishes
-    TPM1->SC &= ~TPM_SC_CMOD_MASK; // Disable TPM1 counter
 }
 
-// Melody 2: Twinkle Twinkle Little Star (example melody)
-void playtune_melody2(void) {
-    int melody[] = {
-        262, 262, 392, 392, 440, 440, 392, 
-        349, 349, 330, 330, 294, 294, 262
+void playCelebratoryTune(void) {
+    uint32_t celebratoryMelody[] = {
+        E5, B5, A5, B5, C6, C6, B5, G5, G5,
+        A5, A5, A5, G5, E5, E5, E5, E5, D5,
+        E5, B5, A5, B5, C6, C6, B5, G5, G5,
+        A5, A5, A5, G5, E5, E5
     };
-    int numNotes = sizeof(melody) / sizeof(melody[0]);
-    int noteDuration = 500; // 500ms per note
-
+    
+    uint32_t celebratoryDuration[] = {
+        one_note, one_note, semi_note, semi_note, one_note, semi_note, one_note, semi_note, one_note,
+        one_note, one_note, semi_note, (semi_note * 3), one_note, semi_note, semi_note, semi_note, (semi_note * 3),
+        one_note, one_note, semi_note, semi_note, one_note, semi_note, one_note, semi_note, one_note,
+        one_note, one_note, semi_note, (semi_note * 3), (one_note * 2), (one_note * 2)
+    };
+    
+    int numNotes = sizeof(celebratoryMelody) / sizeof(celebratoryMelody[0]);
+    
     for (int i = 0; i < numNotes; i++) {
-        initPWM(melody[i]);
-        delay_ms(noteDuration);
+        // if (runComplete) return;
+        setTone(celebratoryMelody[i]);
+        osDelay(celebratoryDuration[i]);
     }
-    TPM1->SC &= ~TPM_SC_CMOD_MASK; // Disable TPM1 counter
 }
 
 
-// --- Audio Thread Function ---
-// Original:
-// void audio_thread(void *argument) {
-//     playtune_melody1();
-//     // Thread will terminate after playing the melody once in this test setup.
-// }
 
-// Modified:
 void audio_thread(void *argument) {
     for (;;) {
-        if (runComplete) {
-            playtune_melody2();
-        } else {
-            playtune_melody1();
+        // Check if the challenge is complete
+        osMutexAcquire(robot_state_mutex, osWaitForever);
+        bool complete = runComplete;
+        osMutexRelease(robot_state_mutex);
+        
+        if (complete) {
+            break;
         }
-        osDelay(1000); // Optional delay between plays
+        
+        // Play the normal tune continuously.
+        playTune();
     }
-}
-
-
-
-//void audio_thread(void *argument) {
-//    // Initialize PWM once before starting the loop (optional, could be done in main)
-//    // initPWM(1000); // Initialize with a default frequency or handle inside playtune
-
-//	playtune_melody1();
-//    // --- Play Super Mario theme ---
-////    playtune_supermario(); // Play Super Mario theme once
-
-//    // --- Original loop (commented out) ---
-//    /*
-//    for (;;) {
-//        // Example: Play Super Mario theme repeatedly with a delay
-//        playtune_supermario();
-//        osDelay(5000); // Wait 5 seconds before playing again
-//        // Add logic here to decide when/what to play based on robot state or events
-//    }
-//    */
-//   // Thread will terminate after playing the melody once in this test setup.
-//   // For continuous operation based on state, the loop below should be used.
-//}
-
-
-// Melody 3: Super Mario Bros Theme (simplified excerpt)
-// Note frequencies (Hz):
-// E7 ~2640, C7 ~2096, G7 ~3136, G6 ~1568
-// A zero value indicates a rest (pause).
-void playtune_supermario(void) {
-    int melody[] = {
-        // Main theme intro
-        2640, 0, 2640, 0, 0, 2640, 0, 0, 2096, 0, 2640, 0, 0, 3136, 0, 0, 0, 0,
-        
-        // Main theme part 1
-        1568, 0, 0, 0, 1046, 0, 0, 1568, 0, 0, 2093, 0, 0, 1760, 0, 1568, 0, 0, 1319, 0, 
-        1046, 0, 0, 0, 1319, 0, 0, 1760, 0, 0, 2093, 0, 0, 3136, 0, 0, 3520, 0, 0, 2793, 0, 2637, 0, 0,
-        
-        // Main theme part 2
-        2093, 0, 0, 0, 2793, 0, 2637, 0, 0, 2093, 0, 0, 0, 1760, 0, 0, 1976, 0, 0, 1865, 0, 
-        1760, 0, 0, 0, 1568, 0, 2093, 0, 0, 2640, 0, 0, 3136, 0, 0, 3520, 0, 0,
-        
-        // Underground theme
-        1319, 0, 1568, 0, 2093, 0, 1319, 0, 1568, 0, 2093, 0, 0, 0,
-        1319, 0, 1568, 0, 2093, 0, 1319, 0, 1568, 0, 2093, 0, 0, 0,
-        1175, 0, 1397, 0, 1865, 0, 1175, 0, 1397, 0, 1865, 0, 0, 0,
-        1175, 0, 1397, 0, 1865, 0, 1175, 0, 1397, 0, 1865, 0, 0, 0,
-        
-        // Starman invincibility theme
-        2093, 0, 2093, 0, 2093, 0, 1568, 0, 2093, 0, 2637, 0, 0, 0,
-        2093, 0, 2093, 0, 2093, 0, 1568, 0, 2093, 0, 0, 0,
-        2349, 0, 2349, 0, 2349, 0, 1760, 0, 2349, 0, 2793, 0, 0, 0,
-        2349, 0, 2349, 0, 2349, 0, 1760, 0, 2349, 0, 0, 0,
-        
-        // Death sound
-        2093, 0, 0, 0, 0, 0, 1319, 0, 0, 0, 0, 0, 1046, 0, 0, 0, 0, 0,
-        
-        // Level complete fanfare
-        1318, 0, 1567, 0, 2093, 0, 2093, 0, 2093, 0, 2093, 0, 
-        2093, 0, 1567, 0, 1318, 0, 1046, 0, 1046, 0, 1046, 0, 
-        1046, 0, 1318, 0, 1567, 0, 2093, 0, 2093, 0, 2093, 0, 
-        2794, 0, 2794, 0, 2794, 0, 3136, 0, 0, 0, 0, 0
-    };
     
-    int durations[] = {
-        // Main theme intro
-        100, 25, 100, 25, 100, 100, 25, 100, 100, 25, 100, 25, 100, 100, 25, 100, 200, 100,
-        
-        // Main theme part 1
-        200, 25, 175, 100, 200, 25, 100, 200, 25, 100, 150, 25, 100, 150, 25, 150, 25, 100, 150, 25, 
-        300, 25, 175, 100, 150, 25, 100, 150, 25, 100, 150, 25, 100, 150, 25, 100, 150, 25, 100, 150, 25, 150, 25, 200,
-        
-        // Main theme part 2
-        200, 25, 175, 100, 150, 25, 150, 25, 100, 200, 25, 175, 100, 150, 25, 100, 150, 25, 100, 150, 25,
-        300, 25, 175, 100, 150, 25, 150, 25, 100, 150, 25, 100, 150, 25, 100, 150, 25, 300,
-        
-        // Underground theme
-        100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 100, 25, 200, 100,
-        
-        // Starman invincibility theme
-        100, 25, 100, 25, 100, 25, 100, 25, 150, 25, 150, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 150, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 150, 25, 150, 25, 200, 100,
-        100, 25, 100, 25, 100, 25, 100, 25, 150, 25, 200, 100,
-        
-        // Death sound
-        100, 25, 50, 50, 50, 50, 100, 25, 50, 50, 50, 50, 100, 25, 50, 50, 50, 200,
-        
-        // Level complete fanfare
-        150, 25, 150, 25, 150, 25, 150, 25, 150, 25, 150, 25,
-        150, 25, 150, 25, 150, 25, 150, 25, 150, 25, 150, 25,
-        150, 25, 150, 25, 150, 25, 150, 25, 150, 25, 150, 25,
-        150, 25, 150, 25, 150, 25, 300, 25, 100, 100, 100, 100
-    };
-
-    int numNotes = sizeof(melody) / sizeof(melody[0]);
-
-  for (int i = 0; i < numNotes; i++) {
-        // Lock the mutex before accessing the PWM hardware.
-        if (melody[i] != 0) {
-            initPWM(melody[i]);
-        }
-        // Release the mutex immediately after setting up the note.
+    // When challenge is complete, play the unique end tone.
+    playCelebratoryTune();
     
-        
-        // Delay for the note's specified duration.
-        delay_ms(durations[i]);
-        
-         // Disable PWM channel output if the note frequency is 0 (rest)
-         if (melody[i] == 0) {
-              TPM1_C0SC &= ~(TPM_CnSC_MSB_MASK | TPM_CnSC_ELSB_MASK); // Disconnect channel output
-         }
-     }
-    // Stop PWM after the melody finishes
-    TPM1->SC &= ~TPM_SC_CMOD_MASK; // Disable TPM1 counter
+    // Can suspend audio thread here if needed.
+    for (;;) {
+        osDelay(1000);
+    }
 }

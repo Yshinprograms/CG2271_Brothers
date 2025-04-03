@@ -4,8 +4,8 @@
 #include "cmsis_os2.h"
 #include <stdbool.h>
 #include "led.h"
-#include "audio.h" // Include the audio header
-
+#include "audio.h"
+#include "variables.h"
 
 
 // --- Mutex Definition and Initialization (Moved to main.c) ---
@@ -13,7 +13,6 @@ osMutexId_t robot_state_mutex;
 
 // --- Robot State Variable (Moved to main.c) ---
 volatile RobotState robot_state = ROBOT_STATIONARY; // Initial state
-volatile bool runComplete = false;
 
 // --- Motor Control Thread (Moved to main.c) ---
 void motor_control_thread(void *argument) {
@@ -30,9 +29,6 @@ void motor_control_thread(void *argument) {
         robot_state = ROBOT_STATIONARY;
         osMutexRelease(robot_state_mutex);
         osDelay(5000); // Simulate stationary for 5 seconds
-			
-			  // For testing: Toggle runComplete flag to switch melodies.
-        runComplete = !runComplete;
     }
 }
 
@@ -42,6 +38,7 @@ int main (void) {
     // System Initialization
     SystemCoreClockUpdate();
     init_leds(); // Initialize LEDs
+    // initAudio(); // Initialize audio
 
     osKernelInitialize();
 
@@ -53,8 +50,7 @@ int main (void) {
 
     osThreadNew(led_control_thread, NULL, NULL);
     osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (now defined in main.c)
-    
-		osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
+    // osThreadNew(audio_thread, NULL, NULL); // Create audio thread
 
     osKernelStart();
     for (;;) {}
