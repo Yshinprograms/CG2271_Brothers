@@ -23,28 +23,21 @@ void test_sequence_thread(void *argument) {
 		robot_state = ROBOT_MOVING_FORWARD;
 		runComplete = false; // Example: Play melody 1 when moving
 		osMutexRelease(robot_state_mutex);
-		osDelay(3000); // Move forward for 3 seconds
-
-		// Stationary
-		osMutexAcquire(robot_state_mutex, osWaitForever);
-		robot_state = ROBOT_STATIONARY;
-		runComplete = true; // Example: Play melody 2 when stopped
-		osMutexRelease(robot_state_mutex);
-		osDelay(3000); // Stay stationary for 3 seconds
+		osDelay(2000); // Move forward for 2 seconds
 			
-		// Move Left
+		// Curve Left
 		osMutexAcquire(robot_state_mutex, osWaitForever);
-		robot_state = ROBOT_MOVING_LEFT;
+		robot_state = ROBOT_CURVING_LEFT;
 		runComplete = false;
 		osMutexRelease(robot_state_mutex);
-		osDelay(1000); // Turn left for 1 second
+		osDelay(2000); // Turn left for 2 second
 			
-		// Move Right
+		// Curve Right
 		osMutexAcquire(robot_state_mutex, osWaitForever);
-		robot_state = ROBOT_MOVING_RIGHT;
+		robot_state = ROBOT_CURVING_RIGHT;
 		runComplete = false;
 		osMutexRelease(robot_state_mutex);
-		osDelay(1000); // Turn right for 1 second
+		osDelay(2000); // Turn right for 2 second
 			
 		// Move Back
 		osMutexAcquire(robot_state_mutex, osWaitForever);
@@ -53,12 +46,12 @@ void test_sequence_thread(void *argument) {
 		osMutexRelease(robot_state_mutex);
 		osDelay(2000); // Move back for 2 seconds
 			
-		// Stationary again
+		// Stationary
 		osMutexAcquire(robot_state_mutex, osWaitForever);
 		robot_state = ROBOT_STATIONARY;
-		runComplete = true;
+		runComplete = true; // Example: Play melody 2 when stopped
 		osMutexRelease(robot_state_mutex);
-		osDelay(3000); 
+		osDelay(5000); // Stay stationary for 2 seconds
 	}
 }
 
