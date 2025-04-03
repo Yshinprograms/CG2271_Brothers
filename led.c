@@ -149,6 +149,6 @@ void led_control_thread(void *argument) {
             all_green_leds_on();
             red_leds_stationary_flash();
         }
-    //No osDelay here, it is handled inside the functions.
+    osDelay(10); // Add a small delay (e.g., 10ms) to prevent busy-waiting
   }
 }
