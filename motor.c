@@ -22,8 +22,8 @@ void init_Motor() {
   MOTOR_PORT->PCR[RIGHTENGINE__out] &= ~PORT_PCR_MUX_MASK;
   MOTOR_PORT->PCR[RIGHTENGINE__out] |= PORT_PCR_MUX(1);
   
-	MOTOR_PORT->PDDR |= MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PDDR |= MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	PTC->PDDR |= MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	PTC->PDDR |= MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 	
 	//turn off motors initially
 	moveStop();
@@ -33,84 +33,108 @@ void init_Motor() {
 // Removed osDelay from individual move functions
 void moveUp() { 
 	//both sides move forward
-	MOTOR_PORT->PSOR = MASK(LEFTENGINE_in)| MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	PTC->PSOR = MASK(LEFTENGINE_in)| MASK(RIGHTENGINE_in);
+	PTC->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 }
 
 void moveLeft() {
 	//right side move forward
-	MOTOR_PORT->PSOR = MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PCOR = MASK(RIGHTENGINE__out);
+	PTC->PSOR = MASK(RIGHTENGINE_in);
+	PTC->PCOR = MASK(RIGHTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 	
 	//left side move back
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in);
-	MOTOR_PORT->PSOR = MASK(LEFTENGINE__out);
+	PTC->PCOR = MASK(LEFTENGINE_in);
+	PTC->PSOR = MASK(LEFTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 }
 
 void moveRight() {
 	//right side move back
-	MOTOR_PORT->PCOR = MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PSOR = MASK(RIGHTENGINE__out);
+	PTC->PCOR = MASK(RIGHTENGINE_in);
+	PTC->PSOR = MASK(RIGHTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 	
 	//left side move forward
-	MOTOR_PORT->PSOR = MASK(LEFTENGINE_in);
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out);
+	PTC->PSOR = MASK(LEFTENGINE_in);
+	PTC->PCOR = MASK(LEFTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 }
 
 void moveBack() {
 	//both sides move back
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	PTC->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	PTC->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 	osDelay(500); // Move for 0.5s interval
 }
 
 void moveStop() {
 	//set both sides to stop (both inputs low or both high, depends on driver)
 	// Assuming setting both LOW stops the motor
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	MOTOR_PORT->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	PTC->PCOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	PTC->PCOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
 	// Alternatively, if setting both HIGH stops:
-	// MOTOR_PORT->PSOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
-	// MOTOR_PORT->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+	// PTC->PSOR = MASK(LEFTENGINE_in) | MASK(RIGHTENGINE_in);
+	// PTC->PSOR = MASK(LEFTENGINE__out) | MASK(RIGHTENGINE__out);
+}
+
+// Curve Left: Stop left motor, right motor forward
+void curveLeft() {
+    // Stop Left Motor
+    PTC->PCOR = MASK(LEFTENGINE_in) | MASK(LEFTENGINE__out);
+    // Right Motor Forward
+    PTC->PSOR = MASK(RIGHTENGINE_in);
+    PTC->PCOR = MASK(RIGHTENGINE__out);
+    osDelay(500); // Curve for 0.5s interval (adjust as needed)
+}
+
+// Curve Right: Stop right motor, left motor forward
+void curveRight() {
+    // Stop Right Motor
+    PTC->PCOR = MASK(RIGHTENGINE_in) | MASK(RIGHTENGINE__out);
+    // Left Motor Forward
+    PTC->PSOR = MASK(LEFTENGINE_in);
+    PTC->PCOR = MASK(LEFTENGINE__out);
+    osDelay(500); // Curve for 0.5s interval (adjust as needed)
 }
 
 // --- Motor Control Thread ---
 // Controls movement based on the shared robot_state
-void motor_control_thread (void *argument) {
-	//actually control the movement
-	RobotState current_state; 
-	for (;;) {
+void motor_control_thread(void *argument) {
+    RobotState current_state;
+    for (;;) {
         osMutexAcquire(robot_state_mutex, osWaitForever);
-        current_state = robot_state; // Read shared state safely
+        current_state = robot_state;
         osMutexRelease(robot_state_mutex);
-		    
-		    switch (current_state) {
-					// Corrected case statements (no bitwise OR)
-					case ROBOT_MOVING_FORWARD:
-					case ROBOT_MOVING: // Treat generic MOVING as FORWARD for now
-						moveUp();
-					break;
-					case ROBOT_MOVING_LEFT:
-						moveLeft();
-					break;
-					case ROBOT_MOVING_RIGHT:
-						moveRight();
-					break;
-					case ROBOT_MOVING_BACK:
-						moveBack();
-					break;
-					case ROBOT_STATIONARY:
-					default: // Stop for STATIONARY or any unknown state
-						moveStop();
-					break;
-				}
-				
-				// Add a small delay to yield CPU time
-				osDelay(20); 
+
+        switch (current_state) {
+            case ROBOT_MOVING_FORWARD:
+                moveUp();
+                break;
+            case ROBOT_MOVING_BACK:
+                moveBack();
+                break;
+            case ROBOT_MOVING_LEFT:
+                moveLeft();
+                break;
+            case ROBOT_MOVING_RIGHT:
+                moveRight();
+                break;
+            case ROBOT_CURVING_LEFT: // Add this case
+                curveLeft();
+                break;
+            case ROBOT_CURVING_RIGHT: // Add this case
+                curveRight();
+                break;
+            case ROBOT_STATIONARY:
+            default:
+                moveStop();
+                // Optional: Add a small delay here if stopping frequently
+                // osDelay(10); 
+                break;
+        }
+         // If using moveStop(), no osDelay is needed here as moveStop is non-blocking.
+         // If you add delays to moveStop or want a general loop delay, add osDelay here.
     }
 }

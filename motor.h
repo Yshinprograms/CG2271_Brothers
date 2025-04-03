@@ -9,16 +9,18 @@
 #define RIGHTENGINE_in 16 // PTC16
 #define LEFTENGINE__out 13 // PTC13
 #define RIGHTENGINE__out 17 // PTC17
-#define MOTOR_PORT PTC
+#define MOTOR_PORT PORTC
 
 // --- Robot State --- (Unified Definition)
 typedef enum {
     ROBOT_STATIONARY,
-		ROBOT_MOVING,
+    ROBOT_MOVING, // Note: Consider if this generic 'MOVING' state is still needed or if specific directions are always used.
     ROBOT_MOVING_LEFT,
-		ROBOT_MOVING_RIGHT,
-		ROBOT_MOVING_BACK,
-		ROBOT_MOVING_FORWARD
+    ROBOT_MOVING_RIGHT,
+    ROBOT_MOVING_BACK,
+    ROBOT_MOVING_FORWARD,
+    ROBOT_CURVING_LEFT,  // Add this line
+    ROBOT_CURVING_RIGHT // Add this line
 } RobotState;
 
 // --- Mutex Declaration (Declare as extern - defined in main.c) ---
@@ -37,6 +39,7 @@ void moveBack(void);
 void moveRight(void);
 void moveStop(void);
 void motor_control_thread(void *argument);
-
+void curveLeft(void);
+void curveRight(void);
 
 #endif // MOTOR_H

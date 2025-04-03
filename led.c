@@ -10,12 +10,14 @@
 #define MASK(x) (1UL << (x))
 
 /* Delay Function */
+/*
 static void delay (volatile uint32_t nof) {
     while (nof!=0) {
-        asm("NOP");
+        __asm("NOP");
         nof--;
     }
 }
+*/
 
 // --- LED Initialization ---
 void init_leds(void) {

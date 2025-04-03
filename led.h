@@ -47,7 +47,7 @@ extern volatile RobotState robot_state;
 
 // --- Function Prototypes ---
 void init_leds(void);
-void running_green_leds(void);
+void running_green_leds(int current_led_index);
 void all_green_leds_on(void);
 void all_green_leds_off(void);
 void red_leds_moving_flash(void);
