@@ -5,8 +5,7 @@
 #define UART_RX_PIN 22
 #define UART_TX_PIN 23
 
-// Message Queue ID defined externally (e.g., in main.c)
-osMessageQueueId_t uart_msg_queue_id;
+// The queue ID is declared as 'extern' in uart.h and defined in main.c
 
 void UART2_Init(uint32_t baud_rate) {
     uint16_t sbr;
@@ -31,7 +30,7 @@ void UART2_Init(uint32_t baud_rate) {
     UART2->BDL = UART_BDL_SBR(sbr);
 
     // 5. Set Oversampling Ratio (OSR)
-		UART2->C4 = 0x0F;
+    UART2->C4 = 0x0F;
 
     // 6. Enable UART Tx/Rx and Receive Interrupt
     UART2->C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK | UART_C2_RIE_MASK);
@@ -66,4 +65,3 @@ void UART2_IRQHandler(void) {
     }
     // Add checks for other UART flags (overrun, framing error) if needed
 }
-
