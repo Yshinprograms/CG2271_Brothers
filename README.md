@@ -86,7 +86,6 @@ This program makes the KL25Z microcontroller act as the "body" of the robot, res
 *   **Change Motor/LED Pins:** Update the `#define`s in `motor.h` or `led.h` AND update the corresponding `init_Motor()`/`init_leds()` functions (`motor.c`/`led.c`) to configure the new pins correctly.
 
 **Thread Functions**
-Okay, let's break down the thread handling and data handovers for each major feature in more detail. This should help in understanding the precise flow and potential bottlenecks or interaction points.
 
 **1. Feature: Motor Movement (Responding to 'F', 'B', 'L', 'R', 'S', 'D')**
 
