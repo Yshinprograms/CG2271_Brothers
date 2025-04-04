@@ -33,13 +33,13 @@ extern volatile RobotState robot_state;
 
 // --- Function Prototypes ---
 void init_Motor(void);
-void moveUp(void);
-void moveLeft(void);
-void moveBack(void);
-void moveRight(void);
-void moveStop(void);
-void motor_control_thread(void *argument);
+void moveForward(void);
+void moveBackward(void);
+void stopMotors(void);
+void sharpTurnLeft(void);  // Keep sharp turns available
+void sharpTurnRight(void); // Keep sharp turns available
 void curveLeft(void);
 void curveRight(void);
+void specialMovement(void); // Add prototype for the special command
 
 #endif // MOTOR_H

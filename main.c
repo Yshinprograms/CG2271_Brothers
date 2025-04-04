@@ -53,9 +53,9 @@ void tBrain(void *argument) {
             switch (received_char) {
                 case 'F': cmd_to_send = CMD_FORWARD;  break;
                 case 'B': cmd_to_send = CMD_BACKWARD; break;
-                case 'L': cmd_to_send = CMD_LEFT;     break;
-                case 'R': cmd_to_send = CMD_RIGHT;    break;
-                case 'D': cmd_to_send = CMD_SPECIAL;  break; // Assuming 'D' maps to special
+                case 'L': cmd_to_send = CMD_LEFT;     break; // Will trigger curveLeft in tMotorControl
+                case 'R': cmd_to_send = CMD_RIGHT;    break; // Will trigger curveRight in tMotorControl
+                case 'D': cmd_to_send = CMD_STOP;     break; // 'D' (Done) signals stop + completion
                 case 'S': cmd_to_send = CMD_STOP;     break;
                 default:  valid_command = false;      break; // Ignore invalid characters
             }
@@ -66,13 +66,18 @@ void tBrain(void *argument) {
 
                 // Update the global robot state (protected by mutex)
                 osMutexAcquire(robot_state_mutex, osWaitForever);
-                if (cmd_to_send == CMD_STOP) {
+                if (received_char == 'D') { // Special handling for Done command
                     robot_state = ROBOT_STATIONARY;
-                    runComplete = true; // Example: set flag when stopping
+                    runComplete = true; // Set completion flag for audio
+
+                } else if (cmd_to_send == CMD_STOP) { // Handling for 'S' (Emergency Stop)
+                    robot_state = ROBOT_STATIONARY;
+                    // runComplete remains false or its previous state
+
                 } else {
-                    robot_state = ROBOT_MOVING; // Generic moving state
-                    // You might want more specific moving states here based on cmd_to_send
-                    runComplete = false; // Example: clear flag when moving
+                    // For F, B, L, R commands
+                    robot_state = ROBOT_MOVING; // Set generic moving state for LED
+                    runComplete = false; // Ensure completion flag is false while moving
                 }
                 osMutexRelease(robot_state_mutex);
             }
@@ -92,12 +97,33 @@ void tMotorControl(void *argument) {
         if (status == osOK) {
             // Execute the motor action based on the command
             switch(received_command) {
-                case CMD_FORWARD:   moveForward();    break; // Assumes functions in motor.c
-                case CMD_BACKWARD:  moveBackward();   break;
-                case CMD_LEFT:      turnLeft();       break;
-                case CMD_RIGHT:     turnRight();      break;
-                case CMD_SPECIAL:   specialMovement();break; // Define this function
-                case CMD_STOP:      stopMotors();     break;
+                case CMD_FORWARD:
+                    moveForward();
+                    osDelay(500); // Move for 0.5s
+                    stopMotors();
+                    break;
+                case CMD_BACKWARD:
+                    moveBackward();
+                    osDelay(500); // Move for 0.5s
+                    stopMotors();
+                    break;
+                case CMD_LEFT:
+                    curveLeft(); // Use curveLeft for 'L' command
+                    osDelay(500); // Turn for 0.5s
+                    stopMotors();
+                    break;
+                case CMD_RIGHT:
+                    curveRight(); // Use curveRight for 'R' command
+                    osDelay(500); // Turn for 0.5s
+                    stopMotors();
+                    break;
+                case CMD_SPECIAL:   // Currently unused based on description, stops immediately
+                    specialMovement();
+                    stopMotors();
+                    break;
+                case CMD_STOP:      // Handles 'S' (Stop) and 'D' (Done) commands
+                    stopMotors();
+                    break;
             }
         }
     }
