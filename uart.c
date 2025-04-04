@@ -31,8 +31,7 @@ void UART2_Init(uint32_t baud_rate) {
     UART2->BDL = UART_BDL_SBR(sbr);
 
     // 5. Set Oversampling Ratio (OSR)
-    UART2->C4 = UART_C4_OSR(UART_OVERSAMPLE_RATE - 1);
-    UART2->C5 |= UART_C5_BOTHEDGE_MASK; // Enable Both Edge Sampling
+		UART2->C4 = 0x0F;
 
     // 6. Enable UART Tx/Rx and Receive Interrupt
     UART2->C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK | UART_C2_RIE_MASK);
