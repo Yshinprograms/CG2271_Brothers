@@ -157,3 +157,4 @@ This program makes the KL25Z microcontroller act as the "body" of the robot, res
         *   **Action:** After the `melody2` loop finishes, it stops the PWM again.
         *   **Termination:** Enters an infinite wait (`for(;;) { osDelay(osWaitForever); }`) or could terminate (`osThreadTerminate`).
 *   **Summary:** Audio playback runs largely independently, blocking itself with `osDelay` for note durations. The completion is triggered by `tBrain` setting a shared flag (`runComplete`) protected by a mutex. `audio_thread` polls this flag between notes. This polling introduces potential latency in starting the completion tone, dependent on the duration of the `melody1` note playing when the 'D' command is processed. The buzzer pitch is controlled by dynamically changing the PWM frequency via `initPWM`.
+![Sequence Diagram](rtos-Mutex_Usage_Sequence__robot_state_mutex_.png)
