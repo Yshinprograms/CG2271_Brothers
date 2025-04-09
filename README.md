@@ -1,5 +1,6 @@
 **The Big Picture**
 
+
 This program makes the KL25Z microcontroller act as the "body" of the robot, responding to simple commands received wirelessly (via an ESP32 acting as the "ears"). It uses a Real-Time Operating System (RTOS) called CMSIS-RTOS2 to manage different tasks concurrently: listening for commands, controlling motors, managing LED feedback, and playing sounds on a buzzer.
 
 **Core Concepts (How it Manages Multiple Things)**
