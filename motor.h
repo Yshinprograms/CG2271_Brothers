@@ -41,5 +41,6 @@ void sharpTurnRight(void); // Keep sharp turns available
 void curveLeft(void);
 void curveRight(void);
 void specialMovement(void); // Add prototype for the special command
+void motor_control_thread(void *argument);
 
 #endif // MOTOR_H

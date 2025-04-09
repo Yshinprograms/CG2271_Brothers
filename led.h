@@ -37,13 +37,9 @@
 #define led_on    1
 #define led_off   0
 
-// --- Mutex Declaration (Declare as extern - defined in main.c) ---
-extern osMutexId_t robot_state_mutex;
-
 // --- Robot State Variable Declaration ---  (Explicitly declare robot_state as extern)
 // This is just a declaration, not a definition and tells the compiler when
 // compiling led.c that robot_state exists somewhere else (main.c)
-extern volatile RobotState robot_state;
 
 // --- Function Prototypes ---
 void init_leds(void);
@@ -57,3 +53,4 @@ void set_green_led(int index, int state);
 void set_red_led(int index, int state);
 
 #endif // LED_H
+

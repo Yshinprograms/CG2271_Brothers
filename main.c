@@ -6,28 +6,10 @@
 #include "led.h"
 #include "audio.h" // Include the audio header
 #include "motor.h" // Include the motor header
-#include "uart.h"  // Include the UART header
-
-// --- Task Function Prototypes ---
-void tBrain(void *argument);          // Brain task to process commands
-void tMotorControl(void *argument);   // Motor control task
-// led_control_thread and audio_thread prototypes assumed in their respective .h files
-
-// --- Message Queue Definitions ---
-osMessageQueueId_t uart_msg_queue_id;     // Queue for UART ISR -> tBrain
-osMessageQueueId_t motor_cmd_queue_id;    // Queue for tBrain -> tMotorControl
-#define UART_QUEUE_SIZE 16
-#define MOTOR_QUEUE_SIZE 8
-
-// --- Command Definitions ---
-typedef enum {
-    CMD_FORWARD,
-    CMD_BACKWARD,
-    CMD_LEFT,
-    CMD_RIGHT,
-    CMD_SPECIAL,
-    CMD_STOP
-} MotorCommand_t;
+#define RED_LED    18  // PortB Pin 18
+#define GREEN_LED  19  // PortB Pin 19
+#define BLUE_LED  1    // PortD Pin 1
+#define MASK(x) (1 << (x))
 
 // --- Mutex Definition and Initialization (Moved to main.c) ---
 osMutexId_t robot_state_mutex;
@@ -35,132 +17,140 @@ osMutexId_t robot_state_mutex;
 // --- Robot State Variable (Moved to main.c) ---
 volatile RobotState robot_state = ROBOT_STATIONARY; // Initial state
 volatile bool runComplete = false;
+volatile char received_command = 0;  // Stores received command
 
-// --- Brain Task (Processes Commands from UART) ---
-void tBrain(void *argument) {
-    char received_char;
-    osStatus_t status;
 
-    for (;;) {
-        // Wait for a character from the UART interrupt queue
-        status = osMessageQueueGet(uart_msg_queue_id, &received_char, NULL, osWaitForever);
+void InitGPIO(void)
+{
+  // Enable Clock to PORTB and PORTD
+  SIM->SCGC5 |= ((SIM_SCGC5_PORTB_MASK) | (SIM_SCGC5_PORTD_MASK));
+  
+  // Configure MUX settings to make all 3 pins GPIO
+  
+  PORTB->PCR[RED_LED] &= ~PORT_PCR_MUX_MASK;
+  PORTB->PCR[RED_LED] |= PORT_PCR_MUX(1);
+  
+  PORTB->PCR[GREEN_LED] &= ~PORT_PCR_MUX_MASK;
+  PORTB->PCR[GREEN_LED] |= PORT_PCR_MUX(1);
+  
+  PORTD->PCR[BLUE_LED] &= ~PORT_PCR_MUX_MASK;
+  PORTD->PCR[BLUE_LED] |= PORT_PCR_MUX(1);
+  
+  // Set Data Direction Registers for PortB and PortD
+  PTB->PDDR |= (MASK(RED_LED) | MASK(GREEN_LED));
+  PTD->PDDR |= MASK(BLUE_LED);
+  
+}
 
-        if (status == osOK) {
-            MotorCommand_t cmd_to_send; // Command to send to motor task
-            bool valid_command = true;
 
-            // Process the received character and prepare command for tMotorControl
-            switch (received_char) {
-                case 'F': cmd_to_send = CMD_FORWARD;  break;
-                case 'B': cmd_to_send = CMD_BACKWARD; break;
-                case 'L': cmd_to_send = CMD_LEFT;     break; // Will trigger curveLeft in tMotorControl
-                case 'R': cmd_to_send = CMD_RIGHT;    break; // Will trigger curveRight in tMotorControl
-                case 'D': cmd_to_send = CMD_STOP;     break; // 'D' (Done) signals stop + completion
-                case 'S': cmd_to_send = CMD_STOP;     break;
-                default:  valid_command = false;      break; // Ignore invalid characters
-            }
+// UART2 Initialization
+void UART2_Init(void) {
+    SIM->SCGC4 |= SIM_SCGC4_UART2_MASK;  // Enable clock for UART2
+    SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;  // Enable clock for Port E
 
-            if (valid_command) {
-                // Send the command to the motor control task queue
-                osMessageQueuePut(motor_cmd_queue_id, &cmd_to_send, 0U, 0U);
+    PORTE->PCR[23] = PORT_PCR_MUX(4);  // Set PTE22 as UART2_RX
+    PORTE->PCR[22] = PORT_PCR_MUX(4);  // Set PTE23 as UART2_TX
 
-                // Update the global robot state (protected by mutex)
-                osMutexAcquire(robot_state_mutex, osWaitForever);
-                if (received_char == 'D') { // Special handling for Done command
-                    robot_state = ROBOT_STATIONARY;
-                    runComplete = true; // Set completion flag for audio
+    UART2->C2 &= ~(UART_C2_TE_MASK | UART_C2_RE_MASK);  // Disable TX and RX during config
 
-                } else if (cmd_to_send == CMD_STOP) { // Handling for 'S' (Emergency Stop)
-                    robot_state = ROBOT_STATIONARY;
-                    // runComplete remains false or its previous state
+    UART2->BDH = 0x00;
+    UART2->BDL = 0x1A;  // Set baud rate to 9600 (assuming 24MHz bus clock)
+    UART2->C4 = 0x0F;   // Oversampling ratio
 
-                } else {
-                    // For F, B, L, R commands
-                    robot_state = ROBOT_MOVING; // Set generic moving state for LED
-                    runComplete = false; // Ensure completion flag is false while moving
-                }
-                osMutexRelease(robot_state_mutex);
-            }
+    UART2->C2 |= UART_C2_RE_MASK;  // Enable Receiver
+    UART2->C2 |= UART_C2_RIE_MASK; // Enable Receive Interrupt
+
+    NVIC_EnableIRQ(UART2_IRQn);  // Enable UART2 interrupt in NVIC
+
+    UART2->C2 |= UART_C2_TE_MASK;  // Enable Transmitter
+	
+		InitGPIO();
+}
+
+
+void UART2_IRQHandler(void) {				
+	  PTB->PSOR = (MASK(RED_LED) | MASK(GREEN_LED));
+  PTD->PSOR = MASK(BLUE_LED);
+
+		PTB->PCOR = MASK(RED_LED); //turn on red led
+    if (UART2->S1 & UART_S1_RDRF_MASK) {  // Check if receive buffer is full
+        received_command = UART2->D;  // Read received character
+
+
+        // Process only valid commands
+        if (received_command == 'F' || received_command == 'L'  || received_command == 'R' ||
+            received_command == 'B' || received_command == 'D' || received_command == 'S') {
+            //control_motors(received_command);
         }
     }
 }
 
-// --- Motor Control Task (Waits for commands from tBrain) ---
-void tMotorControl(void *argument) {
-    MotorCommand_t received_command;
-    osStatus_t status;
 
-    for (;;) {
-        // Wait for a command from the brain task queue
-        status = osMessageQueueGet(motor_cmd_queue_id, &received_command, NULL, osWaitForever);
 
-        if (status == osOK) {
-            // Execute the motor action based on the command
-            switch(received_command) {
-                case CMD_FORWARD:
-                    moveForward();
-                    osDelay(500); // Move for 0.5s
-                    stopMotors();
-                    break;
-                case CMD_BACKWARD:
-                    moveBackward();
-                    osDelay(500); // Move for 0.5s
-                    stopMotors();
-                    break;
-                case CMD_LEFT:
-                    curveLeft(); // Use curveLeft for 'L' command
-                    osDelay(500); // Turn for 0.5s
-                    stopMotors();
-                    break;
-                case CMD_RIGHT:
-                    curveRight(); // Use curveRight for 'R' command
-                    osDelay(500); // Turn for 0.5s
-                    stopMotors();
-                    break;
-                case CMD_SPECIAL:   // Currently unused based on description, stops immediately
-                    specialMovement();
-                    stopMotors();
-                    break;
-                case CMD_STOP:      // Handles 'S' (Stop) and 'D' (Done) commands
-                    stopMotors();
-                    break;
-            }
-        }
-    }
+// --- Test Sequence Thread (Optional - can replace the simple motor logic above) ---
+// This thread now sets the state for the motor_control_thread in motor.c to act upon.
+void test_sequence_thread(void *argument) {
+  for(;;) {
+    // Move Forward
+    osMutexAcquire(robot_state_mutex, osWaitForever);
+    robot_state = ROBOT_MOVING_FORWARD;
+    runComplete = false; // Example: Play melody 1 when moving
+    osMutexRelease(robot_state_mutex);
+    osDelay(2000); // Move forward for 2 seconds
+      
+    // Curve Left
+    osMutexAcquire(robot_state_mutex, osWaitForever);
+    robot_state = ROBOT_CURVING_LEFT;
+    runComplete = false;
+    osMutexRelease(robot_state_mutex);
+    osDelay(2000); // Turn left for 2 second
+      
+    // Curve Right
+    osMutexAcquire(robot_state_mutex, osWaitForever);
+    robot_state = ROBOT_CURVING_RIGHT;
+    runComplete = false;
+    osMutexRelease(robot_state_mutex);
+    osDelay(2000); // Turn right for 2 second
+      
+    // Move Back
+    osMutexAcquire(robot_state_mutex, osWaitForever);
+    robot_state = ROBOT_MOVING_BACK;
+    runComplete = false;
+    osMutexRelease(robot_state_mutex);
+    osDelay(2000); // Move back for 2 seconds
+      
+    // Stationary
+    osMutexAcquire(robot_state_mutex, osWaitForever);
+    robot_state = ROBOT_STATIONARY;
+    runComplete = true; // Example: Play melody 2 when stopped
+    osMutexRelease(robot_state_mutex);
+    osDelay(5000); // Stay stationary for 2 seconds
+  }
 }
+
 
 // --- Main Function ---
 int main (void) {
     // System Initialization
     SystemCoreClockUpdate();
+    //init_leds(); // Initialize LEDs
+    //init_Motor(); // Initialize Motors (Corrected name)
+    UART2_Init();  // Initialize UART2 for interrupt-based reception
 
-    // Initialize Peripherals
-    init_leds();    // Initialize LEDs
-    init_Motor();   // Initialize Motors (Assuming function in motor.c)
-    UART2_Init(9600); // Initialize UART2 with 9600 baud
-
+    // Enable global interrupts
+    __enable_irq();
+  
     osKernelInitialize();
 
-    // Create Mutex
     robot_state_mutex = osMutexNew(NULL); // Create the mutex here in main.c
     if (robot_state_mutex == NULL) {
         // Handle mutex creation error (e.g., print an error message)
         return -1; // Or some other error indication
     }
-
-    // Create Message Queues
-    uart_msg_queue_id = osMessageQueueNew(UART_QUEUE_SIZE, sizeof(char), NULL);
-    motor_cmd_queue_id = osMessageQueueNew(MOTOR_QUEUE_SIZE, sizeof(MotorCommand_t), NULL);
-    if (uart_msg_queue_id == NULL || motor_cmd_queue_id == NULL) {
-        // Handle queue creation error
-        return -1;
-    }
-
-    // Create Threads
-    osThreadNew(led_control_thread, NULL, NULL);
-    osThreadNew(audio_thread, NULL, NULL);
-    osThreadNew(tBrain, NULL, NULL);           // Add Brain task
-    osThreadNew(tMotorControl, NULL, NULL);    // Add Motor Control task
+		//osThreadNew(led_control_thread, NULL, NULL);
+    //osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (uses definition from motor.c)
+    //osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
+    //osThreadNew(test_sequence_thread, NULL, NULL); // Create the test sequence thread
 
     osKernelStart();
     for (;;) {}

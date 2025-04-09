@@ -100,3 +100,45 @@ void specialMovement() {
 	// Example: Stop motors, or perform a specific sequence?
 	stopMotors();
 }
+
+
+// --- Motor Control Thread ---
+// Controls movement based on the shared robot_state
+void motor_control_thread(void *argument) {
+    RobotState current_state;
+    for (;;) {
+        osMutexAcquire(robot_state_mutex, osWaitForever);
+        current_state = robot_state;
+        osMutexRelease(robot_state_mutex);
+
+        switch (current_state) {
+            case ROBOT_MOVING_FORWARD:
+                moveForward();
+                break;
+            case ROBOT_MOVING_BACK:
+                moveBackward();
+                break;
+            case ROBOT_MOVING_LEFT:
+                sharpTurnLeft();
+                break;
+            case ROBOT_MOVING_RIGHT:
+                sharpTurnRight();
+                break;
+            case ROBOT_CURVING_LEFT: // Add this case
+                curveLeft();
+                break;
+            case ROBOT_CURVING_RIGHT: // Add this case
+                curveRight();
+                break;
+            case ROBOT_STATIONARY:
+            default:
+                stopMotors();
+                // Optional: Add a small delay here if stopping frequently
+                // osDelay(10); 
+                break;
+        }
+         // If using moveStop(), no osDelay is needed here as moveStop is non-blocking.
+         // If you add delays to moveStop or want a general loop delay, add osDelay here.
+    }
+}
+

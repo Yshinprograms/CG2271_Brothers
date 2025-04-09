@@ -133,3 +133,4 @@ void audio_thread(void *argument) {
     // osThreadTerminate(osThreadGetId()); 
     for(;;) { osDelay(osWaitForever); } // Wait indefinitely
 }
+
