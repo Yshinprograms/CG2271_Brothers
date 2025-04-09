@@ -198,12 +198,12 @@ void led_control_thread(void *argument) {
     RobotState current_state = robot_state; // Make a local copy
     osMutexRelease(robot_state_mutex);
 
-        if (current_state == ROBOT_MOVING) {
+        if (current_state == ROBOT_STATIONARY) {
+					  all_green_leds_on();
+            red_leds_stationary_flash();
+        } else { // ROBOT_MOVING 
             running_green_leds();
             red_leds_moving_flash();
-        } else { // ROBOT_STATIONARY
-            all_green_leds_on();
-            red_leds_stationary_flash();
         }
     //No osDelay here, it is handled inside the functions.
   }

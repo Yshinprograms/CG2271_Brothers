@@ -47,45 +47,99 @@ void InitGPIO(void)
 void UART2_Init(void) {
     SIM->SCGC4 |= SIM_SCGC4_UART2_MASK;  // Enable clock for UART2
     SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;  // Enable clock for Port E
+	
+	PORTE->PCR[22] &= ~PORT_PCR_MUX_MASK;	
+	PORTE->PCR[23] &= ~PORT_PCR_MUX_MASK;
+    PORTE->PCR[23] = PORT_PCR_MUX(4);  // Set PTE23 as UART2_RX
+    PORTE->PCR[22] = PORT_PCR_MUX(4);  // Set PTE22 as UART2_TX
+		
+	UART2->C2 &= ~(UART_C2_TE_MASK | UART_C2_RE_MASK | UART_C2_TIE_MASK | UART_C2_RIE_MASK);
+    //UART2->C2 &= ~(UARTLP_C2_TE_MASK | UARTLP_C2_RE_MASK);  // Disable TX and RX during config
 
-    PORTE->PCR[23] = PORT_PCR_MUX(4);  // Set PTE22 as UART2_RX
-    PORTE->PCR[22] = PORT_PCR_MUX(4);  // Set PTE23 as UART2_TX
+	
+	uint32_t bus_clock = DEFAULT_SYSTEM_CLOCK / 2;
+  uint32_t divisor = bus_clock / (9600 * 16);
+  UART2->BDH = UART_BDH_SBR(divisor >> 8);
+  UART2->BDL = UART_BDL_SBR(divisor);
+	
+	//BAUD RATE SLD BE 9600 
+	
+    //UART2->BDH = 0x00;
+    //UART2->BDL = 0x1A;  // Set baud rate to 9600 (assuming 24MHz bus clock)
+    //UART2->C4 = 0x0F;   // Oversampling ratio
 
-    UART2->C2 &= ~(UART_C2_TE_MASK | UART_C2_RE_MASK);  // Disable TX and RX during config
+		UART2->C1 = 0;
+		UART2->S2 = 0;
+		UART2->C3 = 0;
 
-    UART2->BDH = 0x00;
-    UART2->BDL = 0x1A;  // Set baud rate to 9600 (assuming 24MHz bus clock)
-    UART2->C4 = 0x0F;   // Oversampling ratio
 
+		
+		
+    //NVIC_EnableIRQ(UART2_IRQn);  // Enable UART2 interrupt in NVIC
+	
+		NVIC_SetPriority(UART2_IRQn, 128);
+    NVIC_ClearPendingIRQ(UART2_IRQn);
+    NVIC_EnableIRQ(UART2_IRQn);
+		
+		
     UART2->C2 |= UART_C2_RE_MASK;  // Enable Receiver
+		UART2->C2 |= UART_C2_TE_MASK;  // Enable Transmitter
     UART2->C2 |= UART_C2_RIE_MASK; // Enable Receive Interrupt
 
-    NVIC_EnableIRQ(UART2_IRQn);  // Enable UART2 interrupt in NVIC
-
-    UART2->C2 |= UART_C2_TE_MASK;  // Enable Transmitter
+    
 	
-		InitGPIO();
+		InitGPIO(); //set up GPIO
 }
 
 
-void UART2_IRQHandler(void) {				
-	  PTB->PSOR = (MASK(RED_LED) | MASK(GREEN_LED));
-  PTD->PSOR = MASK(BLUE_LED);
+void UART2_IRQHandler(void) {
+    PTB->PSOR = (MASK(RED_LED) | MASK(GREEN_LED));
+    PTD->PSOR = MASK(BLUE_LED);
 
-		PTB->PCOR = MASK(RED_LED); //turn on red led
+    //PTB->PCOR = MASK(RED_LED); // Turn on red LED
     if (UART2->S1 & UART_S1_RDRF_MASK) {  // Check if receive buffer is full
         received_command = UART2->D;  // Read received character
-
-
+			PTB->PCOR = MASK(RED_LED); // Turn on red LED
         // Process only valid commands
-        if (received_command == 'F' || received_command == 'L'  || received_command == 'R' ||
+        if (received_command == 'F' || received_command == 'L' || received_command == 'R' ||
             received_command == 'B' || received_command == 'D' || received_command == 'S') {
-            //control_motors(received_command);
+							PTB->PCOR = MASK(RED_LED);
+            // Change robot state based on received command
+            switch (received_command) {
+                case 'F':
+												PTB->PCOR = MASK(RED_LED);
+                    robot_state = ROBOT_MOVING_FORWARD;
+                    break;
+                case 'L':
+									 PTB->PCOR = MASK(GREEN_LED);
+                    robot_state = ROBOT_CURVING_LEFT;
+                    break;
+                case 'R':
+									PTD->PCOR = MASK(BLUE_LED);
+                    robot_state = ROBOT_CURVING_RIGHT;
+                    break;
+                case 'B':
+									PTD->PCOR = MASK(BLUE_LED);
+								PTB->PCOR = MASK(RED_LED);
+                    robot_state = ROBOT_MOVING_BACK;
+                    break;
+                case 'D':
+									PTB->PCOR = MASK(GREEN_LED);
+								PTB->PCOR = MASK(RED_LED);
+                    robot_state = ROBOT_STATIONARY;
+                    break;
+                case 'S':
+									PTD->PCOR = MASK(BLUE_LED);
+								PTB->PCOR = MASK(RED_LED);
+                    robot_state = ROBOT_STATIONARY;
+                    break;
+                default:
+                    break;
+            }
         }
     }
+		osMutexRelease(robot_state_mutex);
 }
-
-
 
 // --- Test Sequence Thread (Optional - can replace the simple motor logic above) ---
 // This thread now sets the state for the motor_control_thread in motor.c to act upon.
@@ -133,8 +187,8 @@ void test_sequence_thread(void *argument) {
 int main (void) {
     // System Initialization
     SystemCoreClockUpdate();
-    //init_leds(); // Initialize LEDs
-    //init_Motor(); // Initialize Motors (Corrected name)
+    init_leds(); // Initialize LEDs
+    init_Motor(); // Initialize Motors (Corrected name)
     UART2_Init();  // Initialize UART2 for interrupt-based reception
 
     // Enable global interrupts
@@ -147,9 +201,9 @@ int main (void) {
         // Handle mutex creation error (e.g., print an error message)
         return -1; // Or some other error indication
     }
-		//osThreadNew(led_control_thread, NULL, NULL);
-    //osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (uses definition from motor.c)
-    //osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
+		osThreadNew(led_control_thread, NULL, NULL);
+    osThreadNew(motor_control_thread, NULL, NULL); // Create motor control thread (uses definition from motor.c)
+    osThreadNew(audio_thread, NULL, NULL); // Create the audio thread
     //osThreadNew(test_sequence_thread, NULL, NULL); // Create the test sequence thread
 
     osKernelStart();
