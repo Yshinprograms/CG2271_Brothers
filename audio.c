@@ -43,26 +43,39 @@ void initPWM(int frequency)
 // Define Melodies and Durations (can be moved to audio.h if preferred)
 // Melody 1: Mary Had a Little Lamb (Continuous Run Song)
 const int melody1_notes[] = {
-    330, 294, 262, 294, 330, 330, 330, // E D C D E E E
-    294, 294, 294,                   // D D D
-    330, 392, 392,                   // E G G
-    330, 294, 262, 294, 330, 330, 330, // E D C D E E E
-    0 // Add a small pause at the end before repeating
+    660, 588, 524, 588, 660, 660, 660, // E D C D E E E
+    588, 588, 588,                   // D D D
+    660, 784, 784,                   // E G G
+    660, 588, 524, 588, 660, 660, 660, // E D C D E E E
+    0,                               // Pause
+    660, 588, 524, 588, 660, 660, 660, // Repeated melody
+    588, 588, 588,                   // D D D
+    660, 784, 784,                   // E G G
+    660, 588, 524, 588, 660, 660, 660, // E D C D E E E
+    0                                // Pause
 };
-const int melody1_durations[] = { // Corresponds to melody1_notes
+
+const int melody1_durations[] = {
     400, 400, 400, 400, 400, 400, 800, // Durations in ms
     400, 400, 800,
     400, 400, 800,
     400, 400, 400, 400, 400, 400, 800,
-    200 // Pause duration
+    200, // Pause duration
+    400, 400, 400, 400, 400, 400, 800, // Repeat
+    400, 400, 800,
+    400, 400, 800,
+    400, 400, 400, 400, 400, 400, 800,
+    200  // Pause duration
 };
+
 const int melody1_numNotes = sizeof(melody1_notes) / sizeof(melody1_notes[0]);
 
 // Melody 2: Twinkle Twinkle (Completion Tone)
 const int melody2_notes[] = {
-    262, 262, 392, 392, 440, 440, 392, // C C G G A A G
-    349, 349, 330, 330, 294, 294, 262  // F F E E D D C
+    786, 786, 1176, 1176, 1320, 1320, 1176, // C C G G A A G
+    1047, 1047, 990, 990, 882, 882, 786     // F F E E D D C
 };
+
 const int melody2_durations[] = { // Corresponds to melody2_notes
     500, 500, 500, 500, 500, 500, 1000,
     500, 500, 500, 500, 500, 500, 1000
